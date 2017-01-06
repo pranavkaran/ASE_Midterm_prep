@@ -1,0 +1,1857 @@
+% to tangle:
+%	notangle -t4 -filter "nocond Copyright" ssem.nw >ssem.java
+%
+% to weave:
+%	noweave -delay -filter "elide '*Copyright*'"	\
+%		-filter "elide %	'*Testing*'" \
+%		-filter prettyjava -index ssem.nw > ssem.tex
+%	(-index must be *after* prettyjava)
+%
+% to weave without prettyprinting:
+%	remove pp-java from \usepackage list
+%	comment out macros marked with %%%'s
+%	change all \javaid{...}'s to [[...]]'s
+%		(this step wouldn't be necessary if Pretzel could deal with [[...]]'s
+%	noweave -t4
+%
+\documentclass[a4paper]{article}
+\date{21 June 1998}
+\def\javaclass#1{\relax}	% for non-prettyprinted webs
+\usepackage{noweb,pp-java,multicol,xspace,ifthen,float}
+%\usepackage{amssymb}
+\noweboptions{longchunks,hideunuseddefs}
+% pp-java package must come *after* noweb
+%%% ---> Comment out for non-prettyprinting weave <---
+%%%
+%%% following lines need to end up in pp-java.sty
+%%% 	they set chunk names in Roman, a la CWEB
+\let\xLA=\LA
+\let\xIt=\It
+\def\LA{\def\It{\Rm\let\It=\xIt}\xLA}
+%%%
+%%% This next is necessary if we want to use underscores in \javaid's in
+%%% chunk names (otherwise the chunk index dies).  The best solution, of
+%%% course, would be for Pretzel to deal properly with [[...]]
+%%% 	---> Be careful about _'s in math mode in chunk names <---
+\makeatletter
+\def\nwixlogsorted#1#2{%
+        \immediate\write\@auxout{\string\bgroup
+                \string\catcode`\string\_=\string\active}
+        \java@ixlog{#1}{#2}%
+        \immediate\write\@auxout{\string\egroup}
+}
+\makeatother
+%%%
+%%% ---> End of prettyprinting macros <---
+
+\javaclass{int}
+\javaclass{Object}
+\javaclass{Graphics}
+\javaclass{Thread}
+\javaclass{Frame}
+\javaclass{Dimension}
+\javaclass{Insets}
+\javaclass{Color}
+\javaclass{Canvas}
+\javaclass{Event}
+\javaclass{AWTEvent}
+\javaclass{ActionEvent}
+\javaclass{Applet}
+\javaclass{Button}
+\javaclass{Math}
+\javaclass{GridLayout}
+\javaclass{Checkbox}
+\javaclass{CheckboxGroup}
+\javaclass{Component}
+\javaclass{Container}
+\javaclass{System}
+\javaclass{Font}
+\javaclass{Label}
+\javaclass{GridBagLayout}
+\javaclass{GridBagConstraints}
+\javaclass{CB_Button}
+\javaclass{CB_Checkbox}
+\javaclass{Panel}
+\javaclass{Callback}
+\javaclass{Dummy_Callback}
+\javaclass{Outlined_Panel}
+\javaclass{Display_Panel}
+\javaclass{Display_Tube}
+\javaclass{Typewriter_Panel}
+\javaclass{Control_Panel}
+\javaclass{Stat_Panel}
+\javaclass{Stat_Switch}
+\javaclass{String}
+\javaclass{ssem}
+\javaclass{ssem_Interface}
+\javaclass{Stop_Lamp}
+\javaclass{WindowAdapter}
+\javaclass{WindowEvent}
+\javaclass{ProgramCloser}
+\javaclass{ActionListener}
+\javaclass{ItemListener}
+\javaclass{ItemEvent}
+\javaclass{Tube_Show_Callback}
+\javaclass{KSP_Callback}
+\javaclass{KLC_Callback}
+\javaclass{KCC_Callback}
+\javaclass{KSC_Callback}
+\javaclass{KAC_Callback}
+\javaclass{KEC_Callback}
+\javaclass{Start_Exec_Callback}
+\javaclass{Stop_Exec_Callback}
+\javaclass{Williams_Tube}
+\javaclass{Line}
+\javaclass{Manual_Mode_Callback}
+\javaclass{Write_Flag_Callback}
+\javaclass{Stat_Switch_Callback}
+\javaclass{Typewriter_Callback}
+
+\def\ssem{\textsc{ssem}\xspace}
+\def\edsac{\textsc{edsac}\xspace}
+
+\def\awt{\textsc{awt}\xspace}
+\def\jdk{\textsc{jdk}\xspace}
+\def\gui{\textsc{gui}\xspace}
+
+\def\ksp{\textsc{ksp}\xspace}
+\def\kcc{\textsc{kcc}\xspace}
+\def\klc{\textsc{klc}\xspace}
+\def\ksc{\textsc{ksc}\xspace}
+\def\kac{\textsc{kac}\xspace}
+\def\kec{\textsc{kec}\xspace}
+\def\kbc{\textsc{kbc}\xspace}
+\def\kmc{\textsc{kmc}\xspace}
+
+\def\test{\textsc{test}\xspace}
+\def\stop{\textsc{stop}\xspace}
+
+\title{The Manchester Small Scale Experimental Machine}
+\author{Lee Wittenberg\thanks{Copyright~\copyright\ 1998, by Lee Wittenberg.
+This document and the software it describes may be freely used for
+noncommercial purposes only.  Any commercial use requires the author's
+permission.}\\\textsf{leew@samson.kean.edu}}
+
+\begin{document}
+\bibliographystyle{plain}
+\maketitle
+% put copyright notice in generated code w/out duplicating in doc:
+% needs -filter "elide '*Copyright*'" to weave properly
+\iffalse
+<<* ((Copyright))>>=
+//
+// Copyright 1998 by Lee Wittenberg.
+// This software may be freely used for noncommercial purposes only.
+// Any commercial use requires the author's permission.
+//
+@ \fi
+\section{Introduction}
+This document describes the world's first working stored-program
+electronic digital computer:  the ``small scale experimental machine''
+built at the University of Manchester,
+which ran its first program on 21~June~1948.  We not only describe the
+machine, but implement a simulator written in Java.  Both this
+document and the program code are generated from a single source file.
+%[Should we explain \texttt{noweb} and Pretzel here?  Also, where---if
+%anywhere---do we explain the Algol~60-like prettyprinting (which can
+%fairly easily be removed if you don't like it)?]
+
+The \ssem itself will be represented by a single Java class, which
+derives from \javaid{Thread} to enable the interface to work cleanly
+with the machine while it is executing:
+<<*>>=
+<<Package imports>>;
+public class ssem extends Thread {
+	<<\javaid{ssem}'s members and methods>>;
+}
+@ %def ssem
+@
+The simulator has been sucessfully run under Linux (\jdk 1.1.5\footnote{The
+Linux 1.1.3 \jdk seems to have some kind of memory leak that causes
+the system to run out of memory on long-running programs such as
+Kilburn's factoring program (section~\ref{factor-pgm}).}), and
+Windows~95 (\jdk 1.1.6).  Some commercial Java compilers, such as
+Visual~J\texttt{++},
+choke on the extra semicolons in the tangled code.  Until someone
+writes a filter that will remove extraneous semicolons from Java code,
+they must be removed manually with a handy text editor, if you need to
+use one of these compilers.
+
+Although the interface uses only standard components at their
+``natural'' size, it still appears to require a screen resolution of
+at least $800\times600$, and may not be completely visible even at
+that resolution, depending on how the \awt components interact with
+the display driver.  This will be fixed in future versions (if
+possible), which will display correctly at $800\times600$ resolution.
+@
+\section{The Machine}
+All we really need to do is create the machine and its
+interface.  The objects do the rest themselves.  Although it's not
+normally a good idea to allow public data members, the components of
+the interface and the machine are highly interconnected (as they were
+in the real \ssem), and the program is much cleaner if we allow these
+two ``global'' variables.
+
+For some strange reason, even though the machine's thread is careful
+to yield control at regular intervals (see below) and all the active
+threads seem to be at the same priority level, the tube displays never get
+updated until after the thread suspends (although this \emph{should}
+happen when the thread yields).  Reducing the thread's priority seems
+to solve this problem fairly cleanly (although, on occasion,
+the simulator appears to skip steps during automatic operation).
+When a better method of dealing with this problem is found, we will
+implement it.
+<<\javaid{ssem}'s members and methods>>=
+public static ssem machine;
+public static ssem_Interface iface;
+public static void main(String[] args) {
+	<<Parse command line arguments, $args[]$>>;
+	ssem.machine = new ssem();
+	ssem.machine.setPriority(Thread.NORM_PRIORITY-1);
+	ssem.iface = new ssem_Interface();
+}
+public ssem() {
+	<<Initialize the \ssem>>;
+	start();
+}
+@ %def main machine iface args ssem
+<<Parse command line arguments, $args[]$>>=
+for (int i = 0; i < args.length; i++) {
+	<<Parse argument \javaid{args}$[i]$>>;
+}
+@
+\subsection{Storage:  Williams Tubes}
+The storage hardware for the \ssem consisted of cathode ray tubes
+later commonly referred to as ``Williams Tube'' memory (after
+F. C. Williams, who discovered the ``anticipation pulse'' effect,
+which made such memory possible~\cite{lavington80}).
+The \ssem had~3 such tubes, the A~(accumulator), C~(control), and
+S~(store) tubes, holding~1, 2, and~32 lines, respectively.  The
+lines in the C~tube were known as the control instruction (C.I.) and
+present instruction (P.I.) lines.
+<<\javaid{ssem}'s members and methods>>=
+public final static int STORE_SIZE = 32;
+private Williams_Tube a_tube = new Williams_Tube(1);
+private Williams_Tube c_tube = new Williams_Tube(2);
+private Williams_Tube s_tube = new Williams_Tube(STORE_SIZE);
+private final static int CI = 0;
+private final static int PI = 1;
+@ %def a_tube c_tube s_tube CI PI STORE_SIZE
+@
+Each Williams Tube held a series of screen lines.  Each line in the
+tubes of our simulator will initially hold the value~0.
+<<*>>=
+class Williams_Tube {
+	private Line[] lines;
+	public Williams_Tube(int n) {
+		lines = new Line[n];
+		for (int i = 0; i < n; i++)
+			lines[i] = new Line(0);
+	}
+	<<\javaid{Williams_Tube}'s members and methods>>;
+}
+@ %def Williams_Tube lines
+@
+Each screen line held a 32-bit two's complement value.  Since Java's
+\javaid{int} class is defined exactly that way, we use an \javaid{int}
+to hold this value.
+<<*>>=
+class Line {
+	public final static int BITS_PER_LINE = 32;
+	public final static int ALL_ONES = ~0;
+	private int value;
+	public Line(int n) {
+		value = n;
+	}
+	<<\javaid{Line}'s members and methods>>;
+}
+@ %def Line value BITS_PER_LINE ALL_ONES
+@
+Naturally, we need to be able to set and retrieve the values of
+various lines in various tubes.
+<<\javaid{Line}'s members and methods>>=
+public int get_Value() {
+	return value;
+}
+public void set_Value(int n) {
+	value = n;
+}
+@ %def get_Value set_Value
+<<\javaid{Williams_Tube}'s members and methods>>=
+public int get_Line_Value(int i) {
+	return lines[i].get_Value();
+}
+public void set_Line_Value(int i, int n) {
+	lines[i].set_Value(n);
+}
+@ %def get_Line_Value set_Line_Value
+@
+We also need to be able to determine the number of lines in a given
+Williams Tube, and clear the contents of a tube:
+<<\javaid{Williams_Tube}'s members and methods>>=
+public int get_Num_Lines() {
+	return lines.length;
+}
+public void clear_Tube() {
+	for (int i = 0; i < lines.length; i++)
+		lines[i].set_Value(0);
+}
+@ %def get_Num_Lines clear_Tube
+@
+The interface will need access to each of the storage tubes.
+<<\javaid{ssem}'s members and methods>>=
+public Williams_Tube get_A_Tube() {
+	return a_tube;
+}
+public Williams_Tube get_C_Tube() {
+	return c_tube;
+}
+public Williams_Tube get_S_Tube() {
+	return s_tube;
+}
+@ %def get_A_Tube get_C_Tube get_S_Tube
+@
+\subsection{Instructions\protect\footnotemark}
+\footnotetext{Early computer users generally used the term
+``order'' for what we would call an instruction, but
+Williams, Kilburn and Tootill~\cite{williams51}
+consistently use ``instruction,'' so that's what we use here.}%
+Instructions only used the lower 16 bits of a word.
+Figure~\ref{instr-fmt} shows the layout of an \ssem instruction, with
+the least significant bit on the left, as was the custom at
+Manchester.
+\begin{figure}[hbt]
+\setlength{\unitlength}{.05\textwidth}
+\begin{center}
+\begin{minipage}{.8\textwidth}
+\begin{picture}(16,3)
+\put( 0,2.5){\makebox(0,0){0}}
+\put( 5,2.5){\makebox(0,0){5}}
+\put(13,2.5){\makebox(0,0){13}}
+\put(16,2.5){\makebox(0,0){16}}
+\put( 0,0){\framebox(5,2){Address}}
+\put( 5,0){\framebox(8,2){Unused\footnote{These bits were
+reserved for a ``storage unit number''~\cite{williams51}, providing
+the (never realized) possibility of extending the \ssem's memory
+to~8192 words simply by adding more storage tubes.}}}
+\put(13,0){\framebox(3,2){Function}}
+\end{picture}
+\end{minipage}
+\caption{\ssem Instruction Format\label{instr-fmt}}
+\end{center}
+\end{figure}
+Bits 13--15 specified the 3-bit function code and bits 0-5 
+the line in the S~tube the instruction operates on.  All other bits
+were unused.  It is likely that instructions were limited to 16~bits
+in anticipation of the 2-instruction per word
+format that was eventually used in the production Mark~I~\cite{burton98}.
+<<\javaid{ssem}'s members and methods>>=
+public final static int FUNC_BITS = 3;
+public final static int FUNC_MASK = ~(~0 << FUNC_BITS);
+public final static int ADDR_BITS = 13;
+public final static int UNUSED_ADDR_BITS = 8;
+public final static int ADDR_MASK =
+	~(~0 << (ADDR_BITS-UNUSED_ADDR_BITS));
+@ %def FUNC_BITS FUNC_MASK ADDR_BITS UNUSED_ADDR_BITS ADDR_MASK
+@
+\subsubsection{Function Code 0: $s,C$}
+Function~0 was what we would call an absolute jump.  The contents of
+the specified line in the store were copied to C.I.
+<<Obey the [[op]]/[[addr]] instruction>>=
+case 0:
+	c_tube.set_Line_Value(CI, s_tube.get_Line_Value(addr));
+	ssem.iface.update_C_Display(CI);
+	break;
+@
+\subsubsection{Function Code 1: $c+s,C$}
+Function~1 was what we would call a relative jump.  The contents of the
+specified line in the store were added to C.I.
+<<Obey the [[op]]/[[addr]] instruction>>=
+case 1:
+	c_tube.set_Line_Value(CI, c_tube.get_Line_Value(CI) +
+		s_tube.get_Line_Value(addr));
+	ssem.iface.update_C_Display(CI);
+	break;
+@
+\subsubsection{Function Code 2: $-s,A$}
+Function~2 was what we might call ``load negative.''  The two's
+complement of the contents of the specified line in the store
+was copied to the accumulator.
+<<Obey the [[op]]/[[addr]] instruction>>=
+case 2:
+	a_tube.set_Line_Value(0, -s_tube.get_Line_Value(addr));
+	ssem.iface.update_A_Display(0);
+	break;
+@
+\subsubsection{Function Code 3: $a,S$}
+Function~3 copied the contents
+of the accumulator to the specified line in the store.
+<<Obey the [[op]]/[[addr]] instruction>>=
+case 3:
+	s_tube.set_Line_Value(addr, a_tube.get_Line_Value(0));
+	ssem.iface.update_S_Display(addr);
+	break;
+@
+\subsubsection{Function Code 4: $a-s,A$}
+Function~4 subtracted the contents of the
+specified line from the accumulator, leaving the result in the
+accumulator.
+
+The circuitry of the \ssem economized on logic elements by only
+decoding as much of the function code as absolutely
+necessary~\cite{lavington75}, so the ``undocumented'' function code~5 had
+the same result as~4.  This idea continued in the design of the later
+Manchester machines, but programmers generally avoided using these
+undefined operations~\cite{campbell-kelly80}.
+<<Obey the [[op]]/[[addr]] instruction>>=
+case 4:
+case 5:
+	a_tube.set_Line_Value(0, a_tube.get_Line_Value(0)
+		- s_tube.get_Line_Value(addr));
+	ssem.iface.update_A_Display(0);
+	break;
+@
+\subsubsection{Function Code 6: {\rm\test}}
+Function~6 determined if the contents of the accumulator were
+negative.  If it was, a flip-flop was set to 
+skip the next instruction.
+<<Obey the [[op]]/[[addr]] instruction>>=
+case 6:
+	if (a_tube.get_Line_Value(0) < 0) {
+		test_flip_flop = true;
+	}
+	break;
+<<\javaid{ssem}'s members and methods>>=
+private boolean test_flip_flop = false;
+@ %def test_flip_flop
+@
+\subsubsection{Function Code 7: {\rm\stop}}
+Function~7 halted the operation of the machine, and illuminated the
+stop lamp.
+<<Obey the [[op]]/[[addr]] instruction>>=
+case 7:
+	set_Prepulse(false);
+	<<Illuminate the stop lamp>>;
+	break;
+@
+\subsection{Executing Instructions}
+The ``rhythm'' of the machine was~4 ``beats'' to the
+``bar''~\cite{williams51}:
+	\begin{enumerate}
+		\item Increment C.I.
+		\item Present instruction to P.I.
+		\item P.I. to staticisor
+		\item P.I. obeyed
+	\end{enumerate}
+Lavington~\cite{lavington75} states that
+C.I. was incremented \emph{after} each instruction rather than
+before.  This is incorrect:  C.I. was incremented during the first
+beat of each bar.
+<<Execute a single instruction>>=
+<<Increment C.I.>>;
+<<Move the instruction specified by C.I. to P.I.>>;
+<<Move the contents of P.I. to the staticisor>>;
+<<Obey the instruction in the staticisor>>;
+@
+The first beat of each bar added either $+1$ or~$+2$ to C.I.,
+depending on the result of a previous \test instruction, stored in a
+flip-flop ([[test_flip_flop]]), which was immediately reset.
+<<Increment C.I.>>=
+{
+	int n = test_flip_flop ? +2 : +1;
+	c_tube.set_Line_Value(CI, c_tube.get_Line_Value(CI) + n);
+	test_flip_flop = false;
+	ssem.iface.update_C_Display(CI);
+}
+@
+We mask off the address bits in C.I. to get the address of the
+instruction to place in P.I.
+<<Move the instruction specified by C.I. to P.I.>>=
+c_tube.set_Line_Value(PI,
+	s_tube.get_Line_Value(c_tube.get_Line_Value(CI) & ADDR_MASK));
+ssem.iface.update_C_Display(PI);
+@
+The instruction in P.I. was not moved directly to the staticisor
+without modification.  Its value flowed through gates opened or closed
+by the staticisor switches $S_0$--$S_{15}$~\cite{williams51}.
+This was useful for manual
+operation when a stream of ones was used instead of the contents of~P.I.,
+allowing the user to set up instructions 
+on these switches to be executed directly.
+All these switches must be in the ``on'' position for automatic operation.
+<<Move the contents of P.I. to the staticisor>>=
+staticisor = get_Manual() ? Line.ALL_ONES : c_tube.get_Line_Value(PI);
+staticisor &= get_Stat_Switches();
+<<\javaid{ssem}'s members and methods>>=
+private int staticisor = 0;
+@ %def staticisor
+@
+We extract a function code, [[op]], and an address, [[addr]], from the
+staticisor, and perform the appropriate operation.
+<<Obey the instruction in the staticisor>>=
+{
+	int op = (staticisor >> ADDR_BITS) & FUNC_MASK;
+	int addr = staticisor & ADDR_MASK;
+	switch (op) {
+	<<Obey the [[op]]/[[addr]] instruction>>;
+	}
+}
+@ %def op addr
+@
+\subsection{The Execution Loop}
+The main work of the simulator is done in an execution loop, which
+executes single instructions governed by the pre-pulse.  Since the
+machine is initially quiescent, the first thing we do is suspend
+the thread.  After each instruction, we politely allow other threads
+to execute.
+<<\javaid{ssem}'s members and methods>>=
+private boolean pre_pulse = false;
+public void run() {
+	suspend();
+	while (true) {
+		do {
+			<<Execute a single instruction>>;
+			yield();
+		} while (pre_pulse);
+		suspend();
+	}
+}
+@ %def run pre_pulse
+@
+Since [[pre_pulse]] must be accessible to concurrent threads in order
+to stop the loop, we must synchronize access to it:
+<<\javaid{ssem}'s members and methods>>=
+synchronized public void set_Prepulse(boolean b) {
+	pre_pulse = b;
+}
+@ %def set_Prepulse
+@
+\section{The Factorization Program}\label{factor-pgm}
+One of the first programs to run on the \ssem was
+one written by Tom Kilburn to
+determine the highest proper factor of $2^{18}$ by trying every number
+from $2^{18}-1$ down, using repeated subtraction instead of
+division~\cite{lavington75,williams48}.  When this program first ran,
+it produced the correct answer after 52 minutes.
+Evidently, it was designed to determine if the machine could run reliably
+for relatively long periods of time.
+
+The original program has been lost, but a later version (dated
+18~July~1948 by G. C. Tootill) has survived, and is reproduced in the following table:
+\begin{center}
+\begin{minipage}{.8\textwidth}
+\begin{tabular}{cll}
+Line
+	& \multicolumn{1}{c}{Binary\footnote{``Backwards'' binary with the least
+		significant bit on the left.}}
+	& Operation\footnote{Early Manchester notation.}/Data
+\\\hline
+\hphantom{0}0	&	\multicolumn{1}{c}{---}	&	unused\footnote{Skipped by
+												the initial C.I.  increment.}
+\\
+\hphantom{0}1	&	0001100000000010---	&	$-24,A$
+\\
+\hphantom{0}2	&	0101100000000110---	&	$a,26$
+\\
+\hphantom{0}3	&	0101100000000010---	&	$-26,A$
+\\
+\hphantom{0}4	&	1101100000000110---	&	$a,27$
+\\
+\hphantom{0}5	&	1110100000000010---	&	$-23,A$
+\\
+\hphantom{0}6	&	1101100000000001---	&	$a-27,A$
+\\
+\hphantom{0}7	&	0000000000000011---	&	\test
+\\
+\hphantom{0}8	&	0010100000000100---	&	$c+20,C$
+\\
+\hphantom{0}9	&	0101100000000001---	&	$a-26,A$
+\\
+10	&	1001100000000110---	&	$a,25$
+\\
+11	&	1001100000000010---	&	$-25,A$
+\\
+12	&	0000000000000011---	&	\test
+\\
+13	&	0000000000000111---	&	\stop
+\\
+14	&	0101100000000010---	&	$-26,A$
+\\
+15	&	1010100000000001---	&	$a-21,A$
+\\
+16	&	1101100000000110---	&	$a,27$
+\\
+17	&	1101100000000010---	&	$-27,A$
+\\
+18	&	0101100000000110---	&	$a,26$
+\\
+19	&	0110100000000000---	&	$22,C$
+\\
+20	&	10111111\ldots	&		$-3$
+\\
+21	&	10000000\ldots	&		$1$
+\\
+22	&	00100000\ldots	&		$4$
+\\
+23	&	00000000000000000011\ldots	&	$-2^{18}$
+\\
+24	&	11111111111111111100\ldots	&	$2^{18}-1$
+\\
+25	&	\multicolumn{1}{c}{---}	&	temporary storage
+\\
+26	&	\multicolumn{1}{c}{---}	&	temporary storage
+\\
+27	&	\multicolumn{1}{c}{---}	&	result
+\end{tabular}
+\end{minipage}
+\end{center}
+and in Java hexadecimal:
+<<factorization program>>=
+{
+	0x0,
+	0x4018, 0x601a, 0x401a, 0x601b, 0x4017, 0x801b,
+	0xc000, 0x2014, 0x801a, 0x6019, 0x4019, 0xc000,
+	0xe000, 0x401a, 0x8015, 0x601b, 0x401b, 0x601a,
+	0x0016, -0x3, 0x1, 0x4, -0x40000, 0x3ffff
+}
+@
+We allow a \verb"-demo" or \verb"-d" command line option to preload the
+factorization program into the S~tube:
+<<Parse argument \javaid{args}$[i]$>>=
+if (args[i].equals("-d") || args[i].equals("-demo"))
+	load_demo = true;
+<<\javaid{ssem}'s members and methods>>=
+private static boolean load_demo = false;
+@ %def load_demo
+<<Initialize the \ssem>>=
+if (load_demo) {
+	<<Load the factorization program>>;
+}
+<<Load the factorization program>>=
+{
+	int[] factor_pgm = <<factorization program>>;
+
+	for (int i = 0; i < factor_pgm.length; i++)
+		s_tube.set_Line_Value(i, factor_pgm[i]);
+}
+@ %def factor_pgm
+@
+\section{Machine Operation}
+The \ssem could be operated in either manual or automatic mode.  The
+automatic/manual operation switch controlled this mode.  We use a
+flag whose access is synchronized, since its value is set by the
+interface rather than the machine (in other words, in a separate
+thread).
+<<\javaid{ssem}'s members and methods>>=
+private boolean manual_mode = true;
+synchronized public void set_Manual(boolean b) {
+	manual_mode = b;
+}
+synchronized public boolean get_Manual() {
+	return manual_mode;
+}
+@ %def manual_mode set_Manual get_Manual
+<<*>>=
+class Manual_Mode_Callback extends Callback {
+	private boolean val;
+	public Manual_Mode_Callback(boolean b) {
+		val = b;
+	}
+	public void func(AWTEvent e) {
+		ssem.machine.set_Manual(val);
+	}
+}
+@ %def val Manual_Mode_Callback func
+@
+\subsection{Manual Operation}
+The \ksp key sent a single pre-pulse to the \ssem to
+execute a single instruction.  It could also be used during automatic
+operation to ``single-step'' through a program.
+Since we don't actually set the pre-pulse flag here, the execution loop will
+only cycle once when it is resumed.  The pre-pulse turns off
+the stop lamp.
+<<*>>=
+class KSP_Callback extends Callback {
+	public void func(AWTEvent e) {
+		<<Turn off the stop lamp>>;
+		ssem.machine.resume();
+	}
+}
+@ %def KSP_Callback func
+@
+During manual operation, instructions were taken from the
+$S_0$--$S_{15}$ switches rather than the store.
+We synchronize access to our staticisor switches just as we do for the
+automatic/manual flag, and for the same reasons.
+<<\javaid{ssem}'s members and methods>>=
+private int staticisor_switches = Line.ALL_ONES;
+synchronized public int get_Stat_Switches() {
+	return staticisor_switches;
+}
+synchronized public void set_Stat_Switch_Bit(int n) {
+	staticisor_switches |= (0x1 << n);
+}
+synchronized public void reset_Stat_Switch_Bit(int n) {
+	staticisor_switches &= ~(0x1 << n);
+}
+@ %def staticisor_switches get_Stat_Switches set_Stat_Switch_Bit reset_Stat_Switch_Bit
+@
+Each staticisor switch sets (or resets) a single bit.  1
+indicates a closed switch, 0 an open one.
+<<*>>=
+class Stat_Switch_Callback extends Callback {
+	private int bit;
+	private boolean val;
+	public Stat_Switch_Callback(int n, boolean b) {
+		bit = n;
+		val = b;
+	}
+	public void func(AWTEvent e) {
+		if (val)
+			ssem.machine.set_Stat_Switch_Bit(bit);
+		else
+			ssem.machine.reset_Stat_Switch_Bit(bit);
+	}
+}
+@ %def Stat_Switch_Callback bit val func
+@
+\subsection{Automatic Operation}
+Closing the pre-pulse switch started automatic execution, taking instructions
+from the S~tube, and turning off the stop lamp.
+<<*>>=
+class Start_Exec_Callback extends Callback {
+	public void func(AWTEvent e) {
+		ssem.machine.set_Prepulse(true);
+		<<Turn off the stop lamp>>;
+		ssem.machine.resume();
+	}
+}
+@ %def Start_Exec_Callback func
+Opening the pre-pulse switch stopped automatic execution, which could
+be resumed by closing the switch or pressing the \ksp key to execute a
+single instruction.
+<<*>>=
+class Stop_Exec_Callback extends Callback {
+	public void func(AWTEvent e) {
+		ssem.machine.set_Prepulse(false);
+	}
+}
+@ %def Stop_Exec_Callback func
+@
+\subsection{Erasing Information}
+The \ksc key cleared the contents of the S~tube.
+<<*>>=
+class KSC_Callback extends Callback {
+	public void func(AWTEvent e) {
+		ssem.machine.get_S_Tube().clear_Tube();
+		ssem.iface.update_S_Display();
+	}
+}
+@ %def KSC_Callback func
+@
+The \kcc key cleared the contents of the A and~C tubes.
+<<*>>=
+class KCC_Callback extends Callback {
+	public void func(AWTEvent e) {
+		ssem.machine.get_A_Tube().clear_Tube();
+		ssem.machine.get_C_Tube().clear_Tube();
+		ssem.iface.update_A_Display();
+		ssem.iface.update_C_Display();
+	}
+}
+@ %def KCC_Callback func
+@
+The \klc key cleared the contents of a single line (specified by the
+staticisor switches) of the S~tube.  Actually, it appears that if the
+key was pressed during automatic operation, things got a bit
+complicated, involving the contents of P.I., as well.  However, this
+doesn't appear to be very useful, so we're not going to bother for
+now.
+<<*>>=
+class KLC_Callback extends Callback {
+	public void func(AWTEvent e) {
+		int n = ssem.machine.get_Stat_Switches() & ssem.ADDR_MASK;
+		ssem.machine.get_S_Tube().set_Line_Value(n, 0);
+		ssem.iface.update_S_Display(n);
+	}
+}
+@ %def KLC_Callback func
+@
+The \kac and \kec keys were not operational in June~1948, but they
+appear to have existed anyway~\cite{burton97,purvis97},
+and seem useful, so we'll provide them for our simulator.
+The \kac key cleared the A~Tube only; the \kec key cleared all 3 tubes.
+<<*>>=
+class KAC_Callback extends Callback {
+	public void func(AWTEvent e) {
+		ssem.machine.get_A_Tube().clear_Tube();
+		ssem.iface.update_A_Display();
+	}
+}
+class KEC_Callback extends Callback {
+	public void func(AWTEvent e) {
+		ssem.machine.get_A_Tube().clear_Tube();
+		ssem.machine.get_C_Tube().clear_Tube();
+		ssem.machine.get_S_Tube().clear_Tube();
+		ssem.iface.update_A_Display();
+		ssem.iface.update_C_Display();
+		ssem.iface.update_S_Display();
+	}
+}
+@ %def KAC_Callback KEC_Callback func
+@
+\subsection{Setting Up the Store}
+The write/erase switch determined whether the typewriter buttons wrote
+(set) or erased (reset) bits on the specified line in the S~tube.
+<<\javaid{ssem}'s members and methods>>=
+private boolean write_mode = true;
+public void set_Write_Flag(boolean b) {
+	write_mode = b;
+}
+public boolean get_Write_Flag() {
+	return write_mode;
+}
+@ %def write_mode set_Write_Flag get_Write_Flag
+<<*>>=
+class Write_Flag_Callback extends Callback {
+	private boolean val;
+	public Write_Flag_Callback(boolean b) {
+		val = b;
+	}
+	public void func(AWTEvent e) {
+		ssem.machine.set_Write_Flag(val);
+	}
+}
+@ %def val Write_Flag_Callback func
+@
+Each of the typewriter buttons was used to set (or reset, depending on
+the setting of the write/erase switch) a particular bit in the line in
+the S~Tube specified by the staticisor switches.
+<<*>>=
+class Typewriter_Callback extends Callback {
+	private int mask;
+	public Typewriter_Callback(int n) {
+		mask = 0x1 << n;
+	}
+	public void func(AWTEvent e) {
+		int i = ssem.machine.get_Stat_Switches() & ssem.ADDR_MASK;
+		int n = ssem.machine.get_S_Tube().get_Line_Value(i);
+		if (ssem.machine.get_Write_Flag())
+			n |= mask;
+		else
+			n &= ~mask;
+		ssem.machine.get_S_Tube().set_Line_Value(i, n);
+		ssem.iface.update_S_Display(i);
+	}
+}
+@ %def Typewriter_Callback func mask
+@
+\section{The User Interface}
+To make our interface intelligible to our users, we use the modern
+\gui idiom of menus, buttons, and checkboxes.
+For portability, we use only standard Java
+\awt{}\footnote{Version~1.1.$x$ at this writing.}
+components.  In future, we may decide to provide a more realistic
+interface, utilizing bitmap pictures of the actual machine, but this
+seems best for now.
+<<Package imports>>=
+import java.awt.*;
+@
+The interface itself will be a frame.  It would be nice if it
+were also an applet, but that will have to wait for another
+day.
+<<*>>=
+class ssem_Interface extends Frame {
+	<<\javaid{ssem_Interface}'s members and methods>>;
+}
+@ %def ssem_Interface
+@
+\subsection{Callbacks}
+\label{callbacks}
+Since we find the idea of ``callback'' functions more intelligible
+than that of ``listeners,'' we create a \javaid{Callback} class to
+deal with this.
+<<*>>=
+abstract class Callback {
+	public abstract void func(AWTEvent e);
+}
+@ %def Callback func
+@
+\iffalse
+For debugging the interface, we provide a dummy callback that does
+nothing, but print a message to the error stream describing the object
+that caused the event.
+This code will disappear when the program is completed.
+<<* ((Testing))>>=
+class Dummy_Callback extends Callback {
+	public void func(AWTEvent e) {
+		System.err.println(">>> Callback for " + e.getSource().toString());
+	}
+}
+@ %def Dummy_Callback func
+\fi
+@
+\subsubsection{Buttons}
+When a button is pressed, it generates an ``action'' event.  We define
+a class derived from \javaid{Button}, containing a callback, 
+<<*>>=
+class CB_Button extends Button implements ActionListener {
+	private Callback cb;
+	<<\javaid{CB_Button}'s members and methods>>;
+}
+@ %def CB_Button cb
+@ whose [[func]] will be executed by the button's [[actionPerformed]] method.
+<<\javaid{CB_Button}'s members and methods>>=
+public void actionPerformed(ActionEvent e) {
+	cb.func(e);
+}
+@ %def actionPerformed
+@
+A callback button is created by supplying a string for the
+button's label and a callback for its action, then registering it as
+the listener for this button.
+<<\javaid{CB_Button}'s members and methods>>=
+public CB_Button(String s, Callback c) {
+	super(s);
+	cb = c;
+	addActionListener(this);
+}
+@ %def CB_Button
+@
+\subsubsection{Checkboxes}
+Checkboxes generate ``item'' events when selected.  As with
+\javaid{CB_Button}, we derive a class from \javaid{Checkbox}:
+<<*>>=
+class CB_Checkbox extends Checkbox implements ItemListener {
+	private Callback cb;
+	<<\javaid{CB_Checkbox}'s members and methods>>;
+}
+@ %def CB_Checkbox cb
+whose [[func]] will be executed by [[itemStateChanged]].
+<<\javaid{CB_Checkbox}'s members and methods>>=
+public void itemStateChanged(ItemEvent e) {
+	cb.func(e);
+}
+@ %def itemStateChanged
+@
+A callback checkbox is created pretty much the same way as a
+callback button, except that we allow for an initial setting,
+<<\javaid{CB_Checkbox}'s members and methods>>=
+public CB_Checkbox(boolean b, Callback c) {
+	super("", null, b);
+	cb = c;
+	addItemListener(this);
+}
+@ %def CB_Checkbox
+and a second constructor is necessary, since we also
+use checkbox groups to implement ``radio buttons.''
+<<\javaid{CB_Checkbox}'s members and methods>>=
+public CB_Checkbox(String s, CheckboxGroup g, boolean b, Callback c) {
+	super(s,g,b);
+	cb = c;
+	addItemListener(this);
+}
+@ %def CB_Checkbox
+
+\subsection{Building the Interface}
+The interface is built by the \javaid{ssem_Interface} constructor.
+After building the interface, we adjust its size ([[pack]]),
+prevent it from being resized ([[setResizable]]), and display it
+([[setVisible]]).
+<<\javaid{ssem_Interface}'s members and methods>>=
+public ssem_Interface() {
+	setTitle("SSEM Simulator");
+	<<Allow the window to be closed>>;
+	<<Build the interface>>;
+	pack();
+	setResizable(false);
+	setVisible(true);
+}
+@ %def ssem_Interface
+@
+We use an inner class to extend \javaid{WindowAdapter} and exit
+the program when the window is closed.
+<<Allow the window to be closed>>=
+addWindowListener(new ProgramCloser());
+@
+<<\javaid{ssem_Interface}'s members and methods>>=
+private class ProgramCloser extends WindowAdapter {
+	public void windowClosing(WindowEvent e) {
+		System.exit(0);
+	}
+}
+@ %def windowClosing ProgramCloser
+<<Package imports>>=
+import java.awt.event.*;
+@
+The interface consists of 4 main components:  the display panel
+containing the A, C and S tube displays; the typewriter panel containing the
+``typewriter'' buttons;
+the control panel containing the
+control keys and switches; and the staticisor panel containing the
+staticisor switches.  The display panel is at the top, and the
+control panel on the bottom.
+
+Since the contents of the displays in the display panel change as the
+machine executes, we need to be able to access them.
+The data members [[a_display]], [[c_display]] and [[s_display]] will
+make this access possible.
+
+Unfortunately, we can't use a simple grid layout since it would expand
+each panel to the same height.  In order to get a single
+column with rows of differing height, we need to use a grid bag
+layout, but the [[gridx]], [[gridwidth]], and
+[[gridheight]] constraints will be the same for all of the components.
+Only [[gridy]] varies.
+
+Also, because the display panel cannot be set up using a layout
+manager (see Section~\ref{display-panel}), we have to pack the
+components and then adjust the spacing of the display panel's
+components before we're done.
+<<Build the interface>>=
+{
+	<<Set up a grid bag layout, [[gbl]], with constraints [[gbc]]>>;
+	gbc.gridx = 0; gbc.gridwidth = gbc.gridheight = 1;
+	Component x;
+	Display_Panel d;
+	x = d = new Display_Panel();
+	a_display = d.get_A_Display();
+	c_display = d.get_C_Display();
+	s_display = d.get_S_Display();
+	gbc.gridy = 0;
+	<<Add component [[x]] to grid bag [[gbl]], with constraints [[gbc]]>>;
+	x = new Typewriter_Panel();
+	gbc.gridy = 1;
+	<<Add component [[x]] to grid bag [[gbl]], with constraints [[gbc]]>>;
+	x = new Stat_Panel();
+	gbc.gridy = 2;
+	<<Add component [[x]] to grid bag [[gbl]], with constraints [[gbc]]>>;
+	Control_Panel p;
+	x = p = new Control_Panel();
+	lamp = p.get_Lamp();
+	gbc.gridy = 3;
+	<<Add component [[x]] to grid bag [[gbl]], with constraints [[gbc]]>>;
+	pack();
+	d.adjust();
+}
+@
+<<\javaid{ssem_Interface}'s members and methods>>=
+private Stop_Lamp lamp;
+public Stop_Lamp get_Lamp() {
+	return lamp;
+}
+@ %def lamp get_Lamp
+@
+The only access other elements of the machine need to the various
+displays is to be able to update them, so we supply
+[[update_A_Display]], [[update_C_Display]] and [[update_S_Display]].
+Often only one line of any display needs to be updated at any given time,
+hence the versions with a parameter~[[n]] to specify the line to be
+updated.
+<<\javaid{ssem_Interface}'s members and methods>>=
+private Display_Tube a_display;
+private Display_Tube c_display;
+private Display_Tube s_display;
+public void update_A_Display() {
+	a_display.repaint();
+}
+public void update_A_Display(int n) {
+	a_display.repaint(n);
+}
+public void update_C_Display() {
+	c_display.repaint();
+}
+public void update_C_Display(int n) {
+	c_display.repaint(n);
+}
+public void update_S_Display() {
+	s_display.repaint();
+}
+public void update_S_Display(int n) {
+	s_display.repaint(n);
+}
+@ %def a_display c_display s_display update_A_Display update_C_Display update_S_Display
+@
+\subsubsection{The Display Panel}\label{display-panel}
+The display panel contains the displays for the 3 Williams Tube
+memories, the A, C, and S tubes.  The panel is laid out as shown in
+Figure~\ref{display-panel-fig}.
+\begin{figure}[hbt]
+\setlength{\unitlength}{.01\textwidth}
+\begin{center}
+\begin{picture}(70,40)\sf
+\put(0,38.5){\framebox(32,1){}}
+\put(0,39){\makebox(0,0)[r]{A:~}}
+\put(38,38){\framebox(32,2){}}
+\put(38,39){\makebox(0,0)[r]{C:~}}
+\put(19,0){\framebox(32,32){}}
+\put(19,31){\makebox(0,0)[r]{S:~}}
+\end{picture}
+\caption{The Display Panel\label{display-panel-fig}}
+\end{center}
+\end{figure}
+
+Each of the display tubes has a checkbox that the user can use to
+disable animation of that particular tube.  Disabling tube animation
+can significantly speed up execution of the simulator.  This feature
+was shamelessly stolen from Martin Campbell-Kelly's \edsac simulators.
+%\enlargethispage{\baselineskip}
+<<Keep a list, [[parts]], of display panel components>>=
+private Component[] parts;
+private final static int A_LABEL = 0;
+private final static int A_BOX = 1;
+private final static int A_TUBE = 2;
+private final static int C_LABEL = 3;
+private final static int C_BOX = 4;
+private final static int C_TUBE = 5;
+private final static int S_LABEL = 6;
+private final static int S_BOX = 7;
+private final static int S_TUBE = 8;
+private final static int NUM_PARTS = S_TUBE + 1;
+@ %def parts A_LABEL A_BOX A_TUBE C_LABEL C_BOX C_TUBE S_LABEL S_BOX S_TUBE NUM_PARTS
+@
+Each display tube needs to be accessed directly for updating during
+program execution.
+<<\javaid{Display_Panel}'s members and methods>>=
+public Display_Tube get_A_Display() {
+	return (Display_Tube) parts[A_TUBE];
+}
+public Display_Tube get_C_Display() {
+	return (Display_Tube) parts[C_TUBE];
+}
+public Display_Tube get_S_Display() {
+	return (Display_Tube) parts[S_TUBE];
+}
+@ %def get_A_Display get_C_Display get_S_Display
+@
+We want the S~tube display to be centered in the panel, which means
+that none of the \awt's standard layout managers will do the job.  We
+will have to place each component explicitly.  Given the preferred
+size of each component, we can easily calculate the proper size for the panel
+and the proper location for each component.  Unfortunately, until the
+frame containing them is either packed or shown, \awt
+components report their preferred size as $0\times0$.  We get around
+this problem by not bothering to do any layout when the panel is
+created, but provide the [[adjust]] method, invoked only after the
+frame has been packed, to lay out the components properly.
+
+We create the display tubes first, so that the checkbox callbacks can
+reference them directly to disable/enable the appropriate display.  Each
+display will initially be enabled, so these checkboxes should be on.
+<<*>>=
+class Display_Panel extends Panel {
+	<<Keep a list, [[parts]], of display panel components>>;
+	public Display_Panel() {
+		setLayout(null); 
+		parts = new Component[NUM_PARTS];
+		parts[A_TUBE] = new Display_Tube(ssem.machine.get_A_Tube());
+		parts[C_TUBE] = new Display_Tube(ssem.machine.get_C_Tube());
+		parts[S_TUBE] = new Display_Tube(ssem.machine.get_S_Tube());
+		add(parts[A_LABEL] = new Label("A:"));
+		add(parts[A_BOX] = new CB_Checkbox(true, new
+			Tube_Show_Callback(parts[A_TUBE])));
+		add(parts[A_TUBE]);
+		add(parts[C_LABEL] = new Label("C:"));
+		add(parts[C_BOX] = new CB_Checkbox(true, new
+			Tube_Show_Callback(parts[C_TUBE])));
+		add(parts[C_TUBE]);
+		add(parts[S_LABEL] = new Label("S:"));
+		add(parts[S_BOX] = new CB_Checkbox(true, new
+			Tube_Show_Callback(parts[S_TUBE])));
+		add(parts[S_TUBE]);
+	}
+	public void adjust() {
+		<<Adjust the layout of the current display panel>>;
+	}
+	<<\javaid{Display_Panel}'s members and methods>>;
+}
+@ %def Display_Panel adjust
+@
+Each checkbox will simply enable or disable its specified display
+tube.
+<<*>>=
+class Tube_Show_Callback extends Callback {
+	private Display_Tube tube;
+	public Tube_Show_Callback(Component t) {
+		tube = (Display_Tube)t;
+	}
+	public void func(AWTEvent e) {
+		tube.setEnabled(((Checkbox)e.getSource()).getState());
+		tube.repaint();
+	}
+}
+@ %def Tube_Show_Callback func tube
+@
+To achieve the layout shown in Figure~\ref{display-panel-fig}, we
+must determine the total height and width needed by the panel.  We do
+this by first
+computing the width and height ([[p_width]] and [[p_height]],
+respectively) of the top part (containing
+the~A and~C~displays) of the panel.  Since the bottom part (containing
+the S~display) is necessarily narrower than the top, this is the
+actual width of the panel.  We use the preliminary height value when
+laying out the~A and C~tubes to align each component along a centered
+horizontal axis.
+We then complete the actual height calculation as we lay out the
+S~tube display.
+
+We will leave horizontal and vertical margins of 8~pixels around the
+components in each panel part, and an extra gap
+of~10 times that much between the~A and~C tubes.
+<<Adjust the layout of the current display panel>>=
+{
+	int p_width, p_height;
+	int margin = 8, extra_gap = 10*margin;
+	<<Compute [[p_width]] and [[p_height]] for the top part of the panel>>;
+	<<Lay out the A and C tube displays>>;
+	<<Lay out the S tube display, adjusting [[p_height]] appropriately>>;
+	setSize(p_width, p_height);
+}
+@ %def p_width p_height margin extra_gap 
+@
+The width of the panel's top part is the sum of the widths of the~A
+and~C components plus space for the gap between them and the margins.
+The height is that of the tallest component, plus space for the margins.
+<<Compute [[p_width]] and [[p_height]] for the top part of the panel>>=
+{
+	p_width = p_height = margin;
+	for (int i = A_LABEL; i <= C_TUBE; i++) {
+		Dimension d = parts[i].getPreferredSize();
+		p_width += d.width;
+		p_height = Math.max(p_height, d.height);
+
+	}
+	p_width += margin + extra_gap;
+	p_height += margin;
+}
+@
+We use [[x_pos]] to keep track of the current horizontal position as
+we lay out the tube displays from left to right, with at gap of
+[[extra_gap]] pixels between them.
+<<Lay out the A and C tube displays>>=
+{
+	int x_pos = margin;
+	<<Lay out the A tube display, adjusting [[xpos]]>>;
+	x_pos += extra_gap;
+	<<Lay out the C tube display, adjusting [[xpos]]>>;
+}
+@ %def x_pos
+@
+For each component in the A~tube display, we use [[getPreferredSize]] to
+find its dimensions, [[d]].  The current horizontal position is in [[x_pos]].
+Since [[p_width]] and [[p_height]] currently hold the dimensions of
+the upper part of the panel, 
+	$$[[y_pos]]=\frac{[[p_height]]-[[d.height]]+1}{2}$$
+will center the component vertically in the top part of the panel.
+
+As we lay out each component, we increment [[x_pos]] by its width so
+as to be ready to place the next one.
+<<Lay out the A tube display, adjusting [[xpos]]>>=
+{
+	Dimension d;
+	d = parts[A_LABEL].getPreferredSize();
+	parts[A_LABEL].setBounds(x_pos,
+							(p_height-d.height+1)/2,
+							d.width,
+							d.height);
+	x_pos += d.width;
+	d = parts[A_BOX].getPreferredSize();
+	parts[A_BOX].setBounds(x_pos,
+							(p_height-d.height+1)/2,
+							d.width,
+							d.height);
+	x_pos += d.width;
+	d = parts[A_TUBE].getPreferredSize();
+	parts[A_TUBE].setBounds(x_pos,
+							(p_height-d.height+1)/2,
+							d.width,
+							d.height);
+	x_pos += d.width;
+}
+@
+The C~tube display is laid out exactly the same way as the A~tube
+display.
+<<Lay out the C tube display, adjusting [[xpos]]>>=
+{
+	Dimension d;
+	d = parts[C_LABEL].getPreferredSize();
+	parts[C_LABEL].setBounds(x_pos,
+							(p_height-d.height+1)/2,
+							d.width,
+							d.height);
+	x_pos += d.width;
+	d = parts[C_BOX].getPreferredSize();
+	parts[C_BOX].setBounds(x_pos,
+							(p_height-d.height+1)/2,
+							d.width,
+							d.height);
+	x_pos += d.width;
+	d = parts[C_TUBE].getPreferredSize();
+	parts[C_TUBE].setBounds(x_pos,
+							(p_height-d.height+1)/2,
+							d.width,
+							d.height);
+	x_pos += d.width;
+}
+@
+The S~tube display is a bit trickier, because the pieces are laid out
+relative to the tube, rather than left-to-right.  The tube is centered
+in the field, the label is laid to the left of where the checkbox
+should go (aligned at the top of the tube), and the label's height
+is used to align the checkbox with it, as we did for the~A and C~tube
+display components.  The tube itself is the tallest component, so we
+add its height (with margins) to [[p_height]] to get the true panel
+height.
+<<Lay out the S tube display, adjusting [[p_height]] appropriately>>=
+{
+	p_height += margin;
+	Dimension d = parts[S_TUBE].getPreferredSize();
+	int x_pos = (p_width - d.width+1)/2;
+	int y_pos = p_height;
+	p_height += d.height;
+	parts[S_TUBE].setBounds(x_pos, y_pos, d.width, d.height);
+	d = parts[S_LABEL].getPreferredSize();
+	x_pos -= parts[S_BOX].getPreferredSize().width;
+	parts[S_LABEL].setBounds(x_pos-d.width, y_pos, d.width, d.height);
+	y_pos += (d.height+1)/2;
+	d = parts[S_BOX].getPreferredSize();
+	parts[S_BOX].setBounds(x_pos, y_pos-(d.height+1)/2, d.width, d.height);
+	p_height += margin;
+}
+@ %def x_pos y_pos
+@
+\paragraph{Display Tubes}
+We use display tubes to show the contents of the Williams tubes.
+<<*>>=
+class Display_Tube extends Canvas {
+	<<\javaid{Display_Tube}'s members and methods>>;
+}
+@ %def Display_Tube
+@
+Each display tube has a fixed size, with a black background.
+Each displayed line contains~32 bits, so the width is constant,
+while the height depends on the number of lines in the tube.
+We use the kludgey ``{\LA\javaid{Display_Tube}'s defined
+constants\RA}'' chunk because the compiler insists that
+[[BIT_WIDTH]] be declared before it is used in the definition of
+[[Width]].
+
+Each display tube is connected to the actual Williams Tube that it
+displays.  The display is initially enabled, so its contents will be
+visible.
+<<\javaid{Display_Tube}'s members and methods>>=
+<<Make this a fixed-size ([[Width]]${}\times{}$[[Height]]) component>>;
+<<\javaid{Display_Tube}'s defined constants>>;
+private final static int Width = BIT_WIDTH * Line.BITS_PER_LINE;
+private int Height;
+private Williams_Tube actual_tube;
+private int num_lines;
+public Display_Tube(Williams_Tube t) {
+	setBackground(Color.black);
+	actual_tube = t;
+	num_lines = t.get_Num_Lines();
+	Height = num_lines * LINE_HEIGHT;
+	setEnabled(true);
+}
+@ %def Width Height num_lines Display_Tube actual_tube
+@
+We allow $8\times8$ pixels for each bit in a line.  ``On'' bits will
+be represented by a dash, ``off'' bits by a dot.  Dashes will be
+5~pixels wide, dots~2.  Both will be 2~pixels high.
+<<\javaid{Display_Tube}'s defined constants>>=
+private final static int LINE_HEIGHT = 8;
+private final static int BIT_WIDTH = 8;
+private final static int BIT_HEIGHT = 2;
+private final static int DASH_WIDTH = 5;
+private final static int DOT_WIDTH = 2;
+@ %def LINE_HEIGHT BIT_WIDTH BIT_HEIGHT DASH_WIDTH DOT_WIDTH
+@
+We paint a display tube simply by drawing a ``blob'' for each bit on
+each line, but only when the tube is ``enabled.''
+We need to investigate the possibility of only redrawing
+the area that's actually changed (the
+\javaid{Graphics}.[[getClipRect]] method may be helpful here).
+<<\javaid{Display_Tube}'s members and methods>>=
+public void paint(Graphics g) {
+	if (is_enabled) {
+		for (int i = 0; i < num_lines; i++) {
+			int n = actual_tube.get_Line_Value(i);
+			for (int j = 0, mask = 0x1; j < Line.BITS_PER_LINE ; j++, mask @<<= 1) {
+				blob(g, i, j, (n & mask) != 0);
+			}
+		}
+	} else {
+		g.setColor(Color.black);
+		g.fillRect(0, 0, Line.BITS_PER_LINE*BIT_WIDTH, num_lines*LINE_HEIGHT);
+	}
+}
+@ %def paint mask
+@
+Since blobbing takes care of redrawing black over where a dash used to
+be, there is no need to fill the display with the background color
+when it is updated.
+<<\javaid{Display_Tube}'s members and methods>>=
+public void update(Graphics g) {
+	paint(g);
+}
+@ %def update
+@
+Most repainting of the display tubes involves a single line.  It
+therefore makes sense to provide a [[repaint]] method that allows us
+to specify which line we want to repaint, translating the line number
+into the appropriate boundaries for the real [[repaint]] call.
+
+Since this version of [[repaint]] is only invoked by the simulator,
+not the Java runtime system, we can avoid all repainting when the
+display is turned off, which should significantly speed up execution.
+<<\javaid{Display_Tube}'s members and methods>>=
+public void repaint(int n) {
+	if (is_enabled)
+		repaint(0, n*LINE_HEIGHT, Line.BITS_PER_LINE*BIT_WIDTH, LINE_HEIGHT);
+}
+@ %def repaint
+@
+For now we take the easy way out and use [[fillRect]] to draw each
+blob as needed.  This should probably be replaced by bitmaps (for efficiency).
+<<\javaid{Display_Tube}'s members and methods>>=
+private static void blob(Graphics g, int row, int col, boolean val) {
+	g.setColor(Color.white);
+	g.fillRect(2+col*BIT_WIDTH, 4+row*LINE_HEIGHT, DOT_WIDTH, 
+		BIT_HEIGHT);
+	if (!val)
+		g.setColor(Color.black);
+	g.fillRect(2+col*BIT_WIDTH+DOT_WIDTH, 4+row*LINE_HEIGHT,
+		DASH_WIDTH-DOT_WIDTH, BIT_HEIGHT);
+
+}
+@ %def blob row col val
+Naturally, we need a way to turn a tube display on or off.
+<<\javaid{Display_Tube}'s members and methods>>=
+private boolean is_enabled;
+public void setEnabled(boolean b) {
+	is_enabled = b;
+}
+@ %def setEnabled is_enabled
+@
+\subsubsection{The Typewriter Panel}
+The typewriter panel (Figure~\ref{typewriter-panel})
+contains 40 ``press-buttons'' used to enter
+information into the store.  Only the first 32 are enabled, since each
+line in the store contains only 32 bits.
+\begin{figure}[H]
+\setlength{\unitlength}{.05\textwidth}
+\begin{center}
+\newcounter{i}\newcounter{j}\newcounter{n}
+\begin{picture}(8,5)\sf
+\setcounter{n}{39}
+\setcounter{j}{8}
+\whiledo{\value{j}>0}{
+	\setcounter{i}{0}
+	\addtocounter{j}{-1}
+	\whiledo{\value{i}<5}{
+		\ifthenelse{\value{n}>31}
+			{\put(\value{j},\value{i}){\line(1,1){1}}}
+			{\relax}
+		\put(\value{j},\value{i}){\makebox(1,1){\then}}
+		\stepcounter{i}\addtocounter{n}{-1}
+	}
+}
+\multiput(0,0)(1,0){9}{\line(0,1){5}}
+\multiput(0,0)(0,1){6}{\line(1,0){8}}
+\end{picture}
+\caption{The Typewriter Panel\label{typewriter-panel}}
+\end{center}
+\end{figure}
+
+To prevent the buttons from expanding to fill the available space, we
+create a separate panel, [[p]], which will actually contain the buttons,
+and will be centered within the typewriter panel.
+<<*>>=
+class Typewriter_Panel extends Panel {
+	public Typewriter_Panel() {
+		Panel p = new Panel();
+		add(p);
+		<<Create a grid of 40 buttons in [[p]]>>;
+	}
+}
+@ %def Typewriter_Panel
+@
+Buttons 32--39 are disabled.
+<<Create a grid of 40 buttons in [[p]]>>=
+p.setLayout(new GridLayout(5,8));
+for (int i = 0; i <5; i++) {
+	for (int j = 0; j < 8; j++) {
+		int n = i + (j*5);
+		Button b = new CB_Button(""+n, new Typewriter_Callback(n));
+		p.add(b);
+		if (n >= Line.BITS_PER_LINE)
+			b.setEnabled(false);
+	}
+}
+@
+\subsubsection{The Staticisor Panel}
+\label{stat-panel-section}
+The 16 staticisor switches\footnote{Actually, only 8 of these switches
+($S_0$--$S_4$ and
+$S_{13}$--$S_{15}$) are enabled.
+The others are included only for completeness.}
+and the automatic/manual operation switch are
+included on the staticisor panel.  Figure~\ref{stat-panel}
+shows how this panel is laid out.
+\begin{figure}[hbt]
+\setlength{\unitlength}{.04\textwidth}
+\begin{center}
+\begin{picture}(20,3)
+\put(0,0){\framebox(20,3){}}
+\put(16,0){\makebox(4,3){\textit{\shortstack{Auto/\\Manual\\switch}}}}
+\put(16,0){\line(0,1){3}}
+\put(0,0){\makebox(5,3){$S_0$--$S_4$}}
+\put(5,0){\line(0,1){3}}
+\put(5,0){\makebox(8,3){$S_5$--$S_{12}$}}
+\put(13,0){\line(0,1){3}}
+\put(13,0){\makebox(3,3){\textit{$S_{13}$--$S_{15}$}}}
+\end{picture}
+\caption{The Staticisor Panel\label{stat-panel}}
+\end{center}
+\end{figure}
+<<*>>=
+class Stat_Panel extends Panel {
+	<<\javaid{Stat_Panel}'s members and methods>>;
+}
+@ %def Stat_Panel
+@
+<<\javaid{Stat_Panel}'s members and methods>>=
+public Stat_Panel() {
+	<<Add switches $S_0$--$S_{15}$>>;
+	<<Add the Auto/Manual switch>>;
+}
+@ %def Stat_Panel
+@
+The automatic/manual operation switch is a simple checkbox group,
+initially in the ``manual'' position.
+<<Add the Auto/Manual switch>>=
+{
+	Panel p = new Panel();
+	p.setLayout(new GridLayout(2,1));
+	CheckboxGroup g = new CheckboxGroup();
+	p.add(new CB_Checkbox("Automatic", g, false, new
+		Manual_Mode_Callback(false)));
+	p.add(new CB_Checkbox("Manual", g, true, new
+		Manual_Mode_Callback(true)));
+	ssem.machine.set_Manual(true);
+	add(p);
+}
+@
+We use a ``helper'' function, [[stat_switches]], to create
+panels for each of the 3~groups of staticisor switches.  Switches 0--4
+and~13--15 are enabled; switches 5--12 are disabled.
+<<Add switches $S_0$--$S_{15}$>>=
+{
+	Panel p = new Panel();
+	p.add(stat_switches(0,4,true));
+	p.add(stat_switches(5,12,false));
+	p.add(stat_switches(13,15,true));
+	add(p);
+}
+@
+The [[stat_switches]] function simply creates the requisite number of
+switches, disabling the switches, if necessary.
+We outline the panel because the Win95 \jdk does not ``gray out'' disabled
+checkboxes, and there is no other way to separate the unused switches
+from the used ones.
+<<\javaid{Stat_Panel}'s members and methods>>=
+static Outlined_Panel stat_switches(int first, int last, boolean working) {
+	Stat_Switch s;
+	Outlined_Panel p = new Outlined_Panel();
+	for (int i = first; i <= last; i++) {
+		p.add(s = new Stat_Switch(i));
+		if (!working)
+			s.setEnabled(false);
+	}
+	return p;
+}
+@ %def stat_switches first last working
+@
+A staticisor switch is a simple checkbox group labeled with an `S'
+followed by an integer, and initially set in the ``closed'' (i.e.,
+``on'') position.
+<<*>>=
+class Stat_Switch extends Panel {
+	public Stat_Switch(int switch_num) {
+		setLayout(new GridLayout(3,1));
+		Label l = new Label("S" + switch_num);
+		l.setAlignment(Label.LEFT);
+		add(l);
+		CheckboxGroup g = new CheckboxGroup();
+		add(new CB_Checkbox("", g, true, new
+			Stat_Switch_Callback(switch_num, true)));
+		add(new CB_Checkbox("", g, false, new
+			Stat_Switch_Callback(switch_num, false)));
+		ssem.machine.set_Stat_Switch_Bit(switch_num);
+	}
+}
+@ %def Stat_Switch switch_num
+@
+\subsubsection{The Control Panel}
+The control panel contains the pre-pulse and write/erase switches as
+well as the \ksp, \klc, \kcc, \kac, \kec, and \ksc keys, and the stop lamp.
+Since the format is not important, we use the default ``flow'' layout.
+A grid bag layout would probably make for a better-looking interface.
+<<*>>=
+class Control_Panel extends Panel {
+	public Control_Panel() {
+		<<Add the pre-pulse switch>>;
+		<<Add the \ksp key>>;
+		<<Add the \klc key>>;
+		<<Add the \ksc key>>;
+		<<Add the \kac key>>;
+		<<Add the \kcc key>>;
+		<<Add the \kec key>>;
+		<<Add the write/erase switch>>;
+		<<Add the stop lamp>>;
+	}
+	<<\javaid{Control_Panel}'s members and methods>>;
+}
+@ %def Control_Panel
+@
+The pre-pulse and write/erase switches are labeled checkbox groups.
+The former is initially off, the latter in the ``write'' position.
+The pre-pulse key was labeled `\textsf{CS}', for
+``completion signal,'' a term ``from the early days when the
+designers thought of the pulse which initiates a new instruction as
+actually completing the previous instruction''~\cite{burton97}.
+<<Add the pre-pulse switch>>=
+{
+	Panel p = new Panel();
+	p.setLayout(new GridLayout(3,1));
+	p.add(new Label(" CS"));
+	CheckboxGroup g = new CheckboxGroup();
+	p.add(new CB_Checkbox("Run", g, false,
+			new Start_Exec_Callback()));
+	p.add(new CB_Checkbox("Stop", g, true,
+			new Stop_Exec_Callback()));
+	ssem.machine.set_Prepulse(false);
+	add(p);
+}
+@
+<<Add the write/erase switch>>=
+{
+	Panel p = new Panel();
+	p.setLayout(new GridLayout(3,1));
+	p.add(new Label("Write/Erase"));
+	CheckboxGroup g = new CheckboxGroup();
+	p.add(new CB_Checkbox("Write", g, true, new
+		Write_Flag_Callback(true)));
+	p.add(new CB_Checkbox("Erase", g, false, new
+		Write_Flag_Callback(false)));
+	ssem.machine.set_Write_Flag(true);
+	add(p);
+}
+@
+The keys are simple callback buttons.
+The \ksp button was labeled
+`\textsf{KC}', for ``key completion''~\cite{burton97,purvis97}.
+<<Add the \ksp key>>=
+add(new CB_Button("KC", new KSP_Callback()));
+<<Add the \klc key>>=
+add(new CB_Button("KLC", new KLC_Callback()));
+<<Add the \kcc key>>=
+add(new CB_Button("KCC", new KCC_Callback()));
+<<Add the \ksc key>>=
+add(new CB_Button("KSC", new KSC_Callback()));
+<<Add the \kac key>>=
+add(new CB_Button("KAC", new KAC_Callback()));
+<<Add the \kec key>>=
+add(new CB_Button("KEC", new KEC_Callback()));
+@
+The stop lamp is full-fledged object, since it will need to paint
+itself differently, depending on its state.
+<<Add the stop lamp>>=
+add(lamp = new Stop_Lamp());
+@
+<<\javaid{Control_Panel}'s members and methods>>=
+private Stop_Lamp lamp;
+public Stop_Lamp get_Lamp() {
+	return lamp;
+}
+@ %def lamp Stop_Lamp
+@
+\paragraph{The Stop Lamp}
+The stop lamp is a canvas with a fixed square size
+(currently~$30\times30$).
+<<*>>=
+class Stop_Lamp extends Canvas {
+	<<\javaid{Stop_Lamp}'s members and methods>>;
+	private final static int Width = 30;
+	private final static int Height = 30;
+	<<Make this a fixed-size ([[Width]]${}\times{}$[[Height]]) component>>;
+}
+@ %def Stop_Lamp Width Height
+@
+The lamp can either be on or off.  When it is off, a black circle is
+displayed; when on, a red one.
+<<\javaid{Stop_Lamp}'s members and methods>>=
+private boolean lamp_is_on;
+public void paint(Graphics g) {
+	if (lamp_is_on)
+		g.setColor(Color.red);
+	else
+		g.setColor(Color.black);
+	g.fillOval(0,0,Width,Width);
+}
+@ %def lamp_is_on paint
+@
+We make it possible for the simulator to illuminate and turn off the
+stop lamp, as necessary.
+<<\javaid{Stop_Lamp}'s members and methods>>=
+public void illuminate(boolean b) {
+	lamp_is_on = b;
+	repaint();
+}
+@ %def illuminate
+@
+<<Illuminate the stop lamp>>=
+ssem.iface.get_Lamp().illuminate(true);
+@
+<<Turn off the stop lamp>>=
+ssem.iface.get_Lamp().illuminate(false);
+@
+\subsubsection{Outlined Panels}\label{outline-panel}
+For clarity, some of the panels in the display are outlined.  An
+outlined panel is simply a regular panel with 2 methods redefined.
+<<*>>=
+class Outlined_Panel extends Panel {
+	<<\javaid{Outlined_Panel}'s redefined \javaid{Panel} methods>>;
+}
+@ %def Outlined_Panel
+@
+The [[paint]] method draws a single-pixel black outline
+around the panel, after painting it normally.
+<<\javaid{Outlined_Panel}'s redefined \javaid{Panel} methods>>=
+public void paint(Graphics g) {
+	super.paint(g);
+	Dimension d = getSize();
+	g.setColor(Color.black);
+	g.drawRect(0,0,d.width-1,d.height-1);
+}
+@ %def paint
+@
+The [[getInsets]] method allows space for the panel's outline.
+<<\javaid{Outlined_Panel}'s redefined \javaid{Panel} methods>>=
+public Insets getInsets() {
+	return new Insets(1,1,1,1);
+}
+@ %def getInsets
+@
+\subsubsection{Fixed Size Components}
+We can fix the size of a component simply by redefining the object's
+[[getMinimumSize]], [[getPreferredSize]], and [[getSize]] methods to return a
+fixed value.  Each such component must define the members
+[[Width]] and [[Height]].
+<<Make this a fixed-size ([[Width]]${}\times{}$[[Height]]) component>>=
+public Dimension getMinimumSize() {
+	return new Dimension(Width, Height);
+}
+public Dimension getPreferredSize() {
+	return getMinimumSize();
+}
+public Dimension getSize() {
+	return getMinimumSize();
+}
+@ %def getMinimumSize getPreferredSize getSize
+@
+\subsubsection{Grid Bags}
+The ``grid bag'' layout manager allows the most flexibility, but it
+also requires a lot of boilerplate code to get working.  Here we
+provide that boilerplate.
+
+We need both a grid bag layout manager, and a set of constraints.
+We'll use the variables [[gbl]] and [[gbc]], respectively.  These
+will, of course, be local to whichever block they are used in.
+Since we are going to pack everything before we show it and disallow
+resizing, we don't want to allow any filling.  If we should need
+anything special, we can change the constraints after setting up the
+grid bag.
+<<Set up a grid bag layout, [[gbl]], with constraints [[gbc]]>>=
+GridBagLayout gbl = new GridBagLayout();
+setLayout(gbl);
+GridBagConstraints gbc = new GridBagConstraints();
+gbc.weightx = gbc.weighty = 0;
+gbc.fill = GridBagConstraints.NONE;
+@ %def gbl gbc
+@
+<<Add component [[x]] to grid bag [[gbl]], with constraints [[gbc]]>>=
+gbl.setConstraints(x, gbc);
+add(x);
+@
+\section{Known Flaws in the Simulator}
+It is rarely possible, or even desirable, for a simulator to match the
+behavior of the original exactly in all situations.  Although we
+have tried to make this simulator as accurate a model as possible, there are a
+number of instances in which we have deliberately introduced
+inaccuracies in the interface or operation of the machine.
+None of these affect the operation of the simulator under ``normal''
+circumstances; they all involve ``exceptional'' situations or modern
+conventions at odds with the original interface.
+\begin{itemize}\nocite{burton97}
+	\item
+	We provide separate displays for each of the 3~tubes.  There was
+	only one display tube in the \ssem, which could be used to display
+	the contents of one tube at a time.
+
+	\item
+	Non-zero bits in the function part (bits 13--15) of the C.I. are
+	ignored.  In the original, the machine would ``hang.''
+
+	\item
+	The simulator does not brighten the ``action line'' (the line
+	specified for an operation by the staticisor switches or address
+	portion of an instruction) as the original did.
+
+	\item
+	The simulator does not require a manual pre-pulse before
+	restarting after a \stop instruction.  Simply resetting the
+	Pre-pulse switch to ``Run'' will cause execution to resume.
+
+	\item
+	The position of the Write/Erase switch is ignored during program
+	execution.  In the original, this would corrupt the program in the
+	store as each line became activated.
+
+	\item
+	The switches in the simulator interface use the up position to
+	mean on, down for off.  The original \ssem used the opposite
+	convention.
+
+	\item
+	The \klc key and the typewriter buttons affect only the line
+	specified by the staticisor switches, whether the simulator is
+	running a program or not.  When the original machine was running,
+	all lines accessed at the time would be affected.
+
+	\item
+	We provide the \kac and \kec keys, even though these were not
+	physically connected in June 1948.  The original also provided
+	the \kbc and \kmc keys, which were never connected.
+\end{itemize}
+@
+\section*{Acknowledgements}
+Special thanks are due to Chris Burton and Bill Purvis
+of the \ssem Rebuild Project,
+whose feedback on the details of the machine and on the
+progress of the rebuild were invaluable in making the simulator 
+as accurate a model as it is.  Any mistakes, of course, are my own.
+
+Thanks are also due to Martin Campbell-Kelly for his \edsac simulators.
+Much of the ``look and feel'' of this simulator is based on his work.
+@
+\bibliography{ssem}
+@
+\section*{Chunk Index}
+\nowebchunks
+@
+\begin{multicols}{2}[\section*{Identifier Index}]
+\nowebindex
+\end{multicols}
+@
+\end{document}
